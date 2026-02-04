@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Heatwave Safety Predictor</title>
+    <style>
+        /* --- DESIGN STYLES --- */
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #2c3e50; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .container { background: #34495e; padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); text-align: center; width: 90%; max-width: 500px; }
+        
+        h2 { font-weight: 300; letter-spacing: 1px; margin-top: 0; }
+        
+        /* DROPDOWN & BUTTON */
+        .search-box { display: flex; gap: 10px; margin-bottom: 20px; }
+        select { padding: 12px; flex-grow: 1; border-radius: 8px; border: none; font-size: 16px; outline: none; }
+        button { padding: 12px 20px; border-radius: 8px; border: none; background: #e67e22; color: white; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        button:hover { background: #d35400; }
+        button:disabled { background: #7f8c8d; cursor: not-allowed; }
+
+        /* CURRENT STATUS BOX */
+        .result-box { padding: 20px; border-radius: 10px; margin-top: 20px; color: white; display: none; animation: fadeIn 0.5s; }
+        .safe { background: #27ae60; }
+        .caution { background: #f39c12; color: #2c3e50; }
+        .danger { background: #e67e22; }
+        .lethal { background: #c0392b; }
+
+        /* FORECAST LIST TABLE */
+        .forecast-box { margin-top: 25px; display: none; text-align: left; }
+        .forecast-table { width: 100%; border-collapse: collapse; background: rgba(0,0,0,0.2); border-radius: 8px; overflow: hidden; }
+        th, td { padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); font-size: 0.9em; }
+        th { background: rgba(0,0,0,0.3); color: #bdc3c7; font-size: 0.8em; text-transform: uppercase; }
+        
+        /* SAFETY BADGES */
+        .badge { padding: 4px 8px; border-radius: 12px; font-size: 0.75em; font-weight: bold; text-transform: uppercase; color: white; }
+        .badge.safe { background: #27ae60; }
+        .badge.caution { background: #f39c12; color: black; }
+        .badge.danger { background: #e67e22; }
+        .badge.lethal { background: #c0392b; }
+
+        /* SMS BOX */
+        .sms-box { margin-top: 20px; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 10px; text-align: left; }
+        .sms-input-group { display: flex; gap: 10px; margin-top: 10px; }
+        .sms-input-group input { flex-grow: 1; padding: 10px; border-radius: 5px; border: none; }
+        .sms-input-group button { background: #8e44ad; }
+        .sms-input-group button:hover { background: #9b59b6; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>🔥 Heatwave Predictor</h2>
+        
+        <div class="search-box">
+            <select id="cityInput">
+                <option value="Mumbai">Mumbai</option>
+                <option value="Delhi">Delhi</option>
+                <option value="Chennai">Chennai</option>
+                <option value="Kolkata">Kolkata</option>
+                <option value="Dubai">Dubai</option>
+                <option value="London">London</option>
+            </select>
+            <button onclick="fetchData()" id="btn">Analyze</button>
+        </div>
+
+        <div id="resultBox" class="result-box">
+            <h1 id="statusText" style="margin: 0; font-size: 2.5em;">--</h1>
+            <p>Wet Bulb: <b id="wbtText">--</b></p>
+            <p id="adviceText" style="font-size: 0.9em; opacity: 0.9;">--</p>
+        </div>
+
+        <div id="forecastBox" class="forecast-box">
+            <h4 style="margin-bottom: 10px; opacity: 0.7;">📅 FUTURE PREDICTION</h4>
+            <table class="forecast-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>WBT</th>
+                        <th>Safety</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                    </tbody>
+            </table>
+        </div>
+
+        <div class="sms-box">
+            <h4 style="margin: 0; display: flex; align-items: center; gap: 8px;">
+                📲 Get SMS Alerts
+            </h4>
+            <div class="sms-input-group">
+                <input type="text" id="phoneInput" placeholder="+91 98765 43210">
+                <button onclick="subscribeSMS()">Subscribe</button>
+            </div>
+            <p id="smsStatus" style="font-size: 0.8em; margin-top: 8px; color: #bdc3c7; height: 1em;"></p>
+        </div>
+
+    </div>
+
+    <script>
+        async function fetchData() {
+            const city = document.getElementById("cityInput").value;
+            const btn = document.getElementById("btn");
+            
+            // UI Loading State
+            btn.innerText = "...";
+            btn.disabled = true;
+            document.getElementById("resultBox").style.display = "none";
+            document.getElementById("forecastBox").style.display = "none";
+            document.getElementById("tableBody").innerHTML = "";
+
+            try {
+                // 1. Get Current Safety
+                const safeRes = await fetch(`/api/safety?city=${city}`);
+                const safeData = await safeRes.json();
+                
+                // 2. Get Forecast
+                const predRes = await fetch(`/api/predict?city=${city}`);
+                const predData = await predRes.json();
+
+                if(safeData.error) throw new Error(safeData.error);
+
+                // UPDATE CURRENT STATUS
+                document.getElementById("statusText").innerText = safeData.status;
+                document.getElementById("wbtText").innerText = safeData.wet_bulb + "°C";
+                document.getElementById("adviceText").innerText = safeData.advice;
+                
+                const box = document.getElementById("resultBox");
+                box.className = "result-box " + safeData.color_code;
+                box.style.display = "block";
+
+                // UPDATE FORECAST TABLE
+                const list = predData.forecast_12h || [];
+                list.slice(0, 6).forEach(row => {
+                    const tr = `
+                        <tr>
+                            <td>${row.timestamp}</td>
+                            <td>${row.predicted_wbt}°C</td>
+                            <td><span class="badge ${row.css}">${row.safety_status}</span></td>
+                        </tr>
+                    `;
+                    document.getElementById("tableBody").innerHTML += tr;
+                });
+
+                if(list.length > 0) {
+                    document.getElementById("forecastBox").style.display = "block";
+                }
+
+            } catch (err) {
+                alert("Error: " + err.message);
+            } finally {
+                btn.innerText = "Analyze";
+                btn.disabled = false;
+            }
+        }
+
+        async function subscribeSMS() {
+            const phone = document.getElementById("phoneInput").value;
+            const city = document.getElementById("cityInput").value;
+            const statusText = document.getElementById("smsStatus");
+
+            if (!phone) {
+                statusText.innerText = "⚠️ Please enter a phone number.";
+                return;
+            }
+
+            statusText.innerText = "Sending...";
+            
+            try {
+                const response = await fetch('/api/subscribe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone: phone, city: city })
+                });
+                
+                const data = await response.json();
+                statusText.innerText = data.message;
+            } catch (err) {
+                statusText.innerText = "❌ Error sending SMS.";
+            }
+        }
+    </script>
+</body>
+</html>
